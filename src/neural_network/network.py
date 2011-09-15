@@ -27,9 +27,12 @@ class NeuralNetwork(object):
             print args
     
     def activate(self, value):
+        #sigmoidal activation function
         return 1.0 / (1.0 + math.exp(-self.t*value)) 
     
     def activate_derivative(self, value):
+        #here value is really not x, this is F(x), where F is activation function
+        #This is because sigmoidal function has derivative equal F(x)(1-F(x))
         return self.t * value * (1.0 - value)
     
     def _init_weights(self, neurals_counts, weights=None):
@@ -65,18 +68,11 @@ class NeuralNetwork(object):
             values = []
 
             for weights in layer:
-                s = ''
                 value = 0
                 for i, _ in enumerate(input):
                     value += weights[i] * input[i]
-                    s += '+%.2f*%.2f' % (weights[i], input[i])
-                s += '+%.2f' % weights[-1]
                 value += weights[-1]
-                s += '=%.2f' % value
-                result = self.activate(value)
-                s += '=%.2f' % result
-                #print s
-                values.append(result)
+                values.append(self.activate(value))
                 
             self.node_values.append(copy(values))
             
@@ -138,11 +134,6 @@ class NeuralNetwork(object):
         
     def teach(self, data, max_retries=1000):
         for i in range(max_retries):
-            if i % 1000 == 0:
-                print i, 'of', max_retries
-            
-            #random.shuffle(data)
-            
             errors = []
             for item in data:
                 #print '=================================='
@@ -155,7 +146,7 @@ class NeuralNetwork(object):
                 
                 self.backpropagate(output, desired_output)
                 
-            if i % 1000 == 0:
+            if i % 100 == 0:
                 print self.root_mean_squared_error(errors)
     
     def test(self, data):
