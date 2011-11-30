@@ -6,22 +6,20 @@
 # Алгоритм муравья
 
 from math import sqrt
-from random import randint, random
+from random import random
 import matplotlib.lines as lines
 import matplotlib.pyplot as plt
 import numpy as np
 
 MAX_CITIES = 15
-MAX_DISTANCE = 100
-MAX_TOUR = MAX_CITIES * MAX_DISTANCE
-MAX_TOURS = 500
-MAX_TIME = MAX_TOURS * MAX_CITIES
+MAX_DISTANCE = 1
+MAX_TIME = 500 * MAX_CITIES
 INIT_PHEROMONE = 1.0 / MAX_CITIES
 
-MAX_ANTS = 20
-ALPHA = 1.  # вес фермента
-BETA = 5.  # коэффициент эвристики, влияние априорных знаний(1/d, где d - растояние)
-RHO = 0.5  # Интенсивность. Коф. испарение равен 1 - RHO. По результатам тестов лучше использовать >= 0.5
+MAX_ANTS = MAX_CITIES * MAX_CITIES
+ALPHA = 1  # вес фермента
+BETA = 5  # коэффициент эвристики, влияние априорных знаний(1/d, где d - растояние)
+RHO = .5  # Интенсивность. Коф. испарение равен 1 - RHO. По результатам тестов лучше использовать >= 0.5
 QVAL = 100  # Кол. феромонов на один проход
 
 
@@ -57,21 +55,37 @@ class Ant(object):
         self.tour_length = 0.
 
 
+def get_random(l):
+    r = random()
+    cur_probability = 0
+    cur_val = None
+
+    for val, probability in l:
+        cur_val = val
+        cur_probability += probability
+        if r <= cur_probability:
+            break
+
+    return cur_val
+
+
 ANTS = []  # [MAX_ANTS]
 CITIES = []  # [MAX_CITIES]
 DISTANCE = []  # [MAX_CITIES][MAX_CITIES]
 PHEROMONE = []  # [MAX_CITIES][MAX_CITIES]
-BEST = MAX_TOUR
+BEST = MAX_CITIES * MAX_DISTANCE
 BEST_ANT = None
 
 
 def init():
     global DISTANCE, PHEROMONE, CITIES, ANTS
-    DISTANCE = [[0.] * MAX_CITIES] * MAX_CITIES
-    PHEROMONE = [[INIT_PHEROMONE] * MAX_CITIES] * MAX_CITIES
 
     for i in range(MAX_CITIES):
-        CITIES.append(City(randint(0, MAX_DISTANCE), randint(0, MAX_DISTANCE)))
+        DISTANCE.append([0.] * MAX_CITIES)
+        PHEROMONE.append([INIT_PHEROMONE] * MAX_CITIES)
+
+    for i in range(MAX_CITIES):
+        CITIES.append(City(random() * MAX_DISTANCE, random() * MAX_DISTANCE))
 
     # calculate distance
     for i in range(MAX_CITIES):
@@ -90,32 +104,44 @@ def init():
         to = to % MAX_CITIES
 
 
-def ant_product(from_city, to_city):
+def ant_product(from_city, to_city, ph=None):
     global DISTANCE, PHEROMONE, ALPHA, BETA
-
-    return (PHEROMONE[from_city][to_city] ** ALPHA) * \
+    ph = ph or PHEROMONE[from_city][to_city]
+    return (ph ** ALPHA) * \
          ((1. / DISTANCE[from_city][to_city]) ** BETA)
 
 
 def select_next_city(ant):
-    global MAX_CITIES
+    global MAX_CITIES, PHEROMONE, DISTANCE
     denom = 0.
     not_visited = []
 
     for to in range(MAX_CITIES):
         if to not in ant.path:
-            not_visited.append(to)
-            denom += ant_product(ant.cur_city, to)
+            ap = ant_product(ant.cur_city, to)
+            not_visited.append((to, ap))
+            denom += ap
 
     assert not_visited
-
+    not_visited = [(val, ap / denom) for (val, ap) in not_visited]
+    to = get_random(not_visited)
+    return to
     i = 0
     while True:
-        p = ant_product(ant.cur_city, not_visited[i]) / denom
+        to, ap = not_visited[i]
+        p = ap / denom
         if random() < p:
-            return not_visited[i]
+            break
         i += 1
         i = i % len(not_visited)
+
+    if False and len(not_visited) == MAX_CITIES - 1:
+        for to_city, ap in not_visited:
+            print '%i %.03f %.01f %.02f' % (to_city, PHEROMONE[ant.cur_city][to_city], DISTANCE[ant.cur_city][to_city], ap / denom)
+        print to
+        raw_input()
+    assert ant.cur_city != to
+    return to
 
 
 def simulate_ants():
@@ -133,16 +159,10 @@ def simulate_ants():
 def update_trails():
     global MAX_CITIES, PHEROMONE, RHO, INIT_PHEROMONE, ANTS
 
-    # pheromone evaporation
-    for i in range(MAX_CITIES):
-        for j in range(MAX_CITIES):
-            if i != j:
-                PHEROMONE[i][j] *= (1. - RHO)
-                if PHEROMONE[i][j] < 0:
-                    PHEROMONE[i][j] = INIT_PHEROMONE
-
     # add new pheromone
     for ant in ANTS:
+        pheromove_amount = QVAL / ant.tour_length
+
         for i in range(MAX_CITIES):
             if i == MAX_CITIES - 1:
                 from_city = ant.path[i]
@@ -150,13 +170,9 @@ def update_trails():
             else:
                 from_city = ant.path[i]
                 to_city = ant.path[i + 1]
-
-            PHEROMONE[from_city][to_city] += QVAL / ant.tour_length
+            assert from_city != to_city
+            PHEROMONE[from_city][to_city] = PHEROMONE[from_city][to_city] * (1 - RHO) + pheromove_amount
             PHEROMONE[to_city][from_city] = PHEROMONE[from_city][to_city]
-
-    for i in range(MAX_CITIES):
-        for j in range(MAX_CITIES):
-            PHEROMONE[i][j] *= RHO
 
 
 def restart_ants():
@@ -177,12 +193,15 @@ if __name__ == '__main__':
     cur_time = 0
     while cur_time < MAX_TIME:
         cur_time += 1
-        if cur_time % 1000 == 0:
-            print 'time:', cur_time
+        if cur_time % 100 == 0:
+            print 'time:', cur_time, 'of', MAX_TIME
 
         if simulate_ants() == 0:
             update_trails()
             cur_time != MAX_TIME and restart_ants()
+
+    #import pprint
+    #pprint.pprint(PHEROMONE)
 
     x, y = [], []
     for i in BEST_ANT.path:
