@@ -109,21 +109,23 @@ if __name__ == "__main__":
     raw_input(u'<ENTER>')
 
     best = Solution()
-    current = Solution()
-    working = copy(current)
     temperature = INITIAL_TEMPERATURE
     timer = 0
 
     while temperature > FINAL_TEMPERATURE:
         timer += 1
         accepted = 0  # Кол. принятых худших решений
-
+        current = copy(best)
+        working = copy(current)
+        
         for i in xrange(STEPS_PER_CHANGE):
             use_new = False
             working.tweak()
 
             if working.energy <= current.energy:
                 use_new = True
+                if working.energy < best.energy:
+                    best = copy(working)
             else:
                 delta = working.energy - current.energy
                 if random.random() < exp(-delta / temperature):
@@ -132,8 +134,6 @@ if __name__ == "__main__":
 
             if use_new:
                 current = copy(working)
-                if current.energy < best.energy:
-                    best = copy(current)
             else:
                 working = copy(current)
 
